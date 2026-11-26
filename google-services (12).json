@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "863295279950",
+    "project_id": "pardaa-810b1",
+    "storage_bucket": "pardaa-810b1.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:863295279950:android:ac04ff7f9accf4fbcac41f",
+        "android_client_info": {
+          "package_name": "com.myott.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "863295279950-vc14opkv1jt9urdhn9i4572eej1t8hv0.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.myott.app",
+            "certificate_hash": "72762970983044f9ab24f95d1b811845dec1fd5e"
+          }
+        },
+        {
+          "client_id": "863295279950-rm7vdr1s05vhsm51tubdjpldh3i1rnlj.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCnqZR96fH1dew_4V107oLet-qFuB4IL1o"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "863295279950-rm7vdr1s05vhsm51tubdjpldh3i1rnlj.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
