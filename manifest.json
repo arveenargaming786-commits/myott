@@ -1,14 +1,14 @@
 {
-  "name": "MyOTT",
-  "short_name": "MyOTT",
+  "name": "Pardaa",
+  "short_name": "Pardaa",
   "description": "आपका अपना स्ट्रीमिंग मंच",
   "lang": "hi",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#07080b",
-  "theme_color": "#07080b",
+  "background_color": "#150508",
+  "theme_color": "#220509",
   "icons": [
     {"src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
     {"src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}
