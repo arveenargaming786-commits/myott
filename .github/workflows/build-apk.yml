@@ -1,4 +1,4 @@
-Build ScreenBox APK
+name: Build ScreenBox APK
 
 on:
   push:
@@ -32,7 +32,7 @@ jobs:
           cat > capacitor.config.json <<'EOT'
           {
             "appId": "com.myott.app",
-            ""appName": "ScreenBox",
+            "appName": "ScreenBox",
             "webDir": "www",
             "backgroundColor": "#220509",
             "plugins": {
