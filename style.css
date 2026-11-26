@@ -104,3 +104,8 @@ video{width:100%;border-radius:16px;margin-top:14px;background:#000;max-height:6
 @keyframes nameIn{to{opacity:1}}
 @keyframes nameOut{to{opacity:0}}
 @media (prefers-reduced-motion:reduce){.splash{display:none}}
+/* ScreenBox: चमकदार सुनहरे अक्षर */
+.wordmark,.sname b{font-family:'Playfair Display',serif;font-weight:700;background:linear-gradient(100deg,#8a5a00 0%,#f2a516 18%,#fff3b0 32%,#f2a516 46%,#b97a0a 62%,#ffe08a 78%,#f2a516 100%);background-size:220% 100%;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;text-shadow:none;animation:shine 3.5s linear infinite;filter:drop-shadow(0 1px 0 rgba(0,0,0,.6)) drop-shadow(0 0 8px rgba(242,165,22,.45))}
+.wordmark{font-size:23px;letter-spacing:.03em}
+.sname b{letter-spacing:.04em}
+@keyframes shine{from{background-position:120% 0}to{background-position:-100% 0}}
