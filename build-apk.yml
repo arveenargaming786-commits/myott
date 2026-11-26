@@ -1,0 +1,84 @@
+name: Build Pardaa APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Prepare web files
+        run: |
+          mkdir -p www
+          cp *.html *.css *.js manifest.json icon-*.png www/
+
+      - name: Create Android project
+        run: |
+          npm init -y
+          npm install @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6 @capacitor-firebase/authentication@6 firebase@10
+          cat > capacitor.config.json <<'EOT'
+          {
+            "appId": "com.myott.app",
+            "appName": "Pardaa",
+            "webDir": "www",
+            "backgroundColor": "#220509",
+            "plugins": {
+              "FirebaseAuthentication": {
+                "skipNativeAuth": true,
+                "providers": ["google.com"]
+              }
+            }
+          }
+          EOT
+          npx cap add android
+
+      - name: Firebase file and fixed signing key
+        run: |
+          if [ -f google-services.json ]; then
+            cp google-services.json android/app/google-services.json
+          else
+            echo "google-services.json नहीं मिली, Google लॉगिन APK में नहीं चलेगा"
+          fi
+          if [ -f pardaa-keystore.txt ]; then
+            mkdir -p ~/.android
+            base64 -d pardaa-keystore.txt > ~/.android/debug.keystore
+          fi
+          keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android 2>/dev/null | grep SHA1 || true
+
+      - name: App icon
+        continue-on-error: true
+        run: |
+          sudo apt-get install -y imagemagick
+          RES=android/app/src/main/res
+          for d in mdpi:48:108 hdpi:72:162 xhdpi:96:216 xxhdpi:144:324 xxxhdpi:192:432; do
+            IFS=: read name legacy fg <<< "$d"
+            convert icon-512.png -resize ${legacy}x${legacy} $RES/mipmap-$name/ic_launcher.png
+            convert icon-512.png -resize ${legacy}x${legacy} $RES/mipmap-$name/ic_launcher_round.png
+            convert icon-512.png -resize ${fg}x${fg} $RES/mipmap-$name/ic_launcher_foreground.png
+          done
+          sed -i 's/#FFFFFF/#7A0C1E/' $RES/values/ic_launcher_background.xml
+
+      - name: Build APK
+        run: |
+          npx cap sync android
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Pardaa-APK
+          path: android/app/build/outputs/apk/debug/app-debug.apk
