@@ -1,28 +1,88 @@
-/* MyOTT — शून्य-निर्भरता डेमो ऐप. डेटा नीचे DATA में बदलें. */
+/* Pardaa — डेटा नीचे DATA में बदलें. पोस्टर की फ़ोटो चाहिए तो img:'लिंक' जोड़ें.
+   क्लाउड (Google लॉगिन + स्टोरेज) का सेटअप: firebase-config.js */
 
 // access: free | ads (विज्ञापन समर्थित) | vip | ppv
 const DATA = [
-  {id:1,type:'series',title:'मिर्ज़ापुर का साया',access:'vip',badge:'ट्रेंडिंग #1',meta:'सीज़न 1 • 8 एपिसोड',age:'U/A 16+',g:'linear-gradient(160deg,#0f4c5c,#e36414)'},
-  {id:2,type:'movie',title:'रक्तबीज',access:'ppv',price:49,badge:'नया',meta:'2 घंटे 14 मिनट',age:'U/A 16+',g:'linear-gradient(160deg,#3a1c71,#d76d77)'},
-  {id:3,type:'movie',title:'बनारस की गलियां',access:'ads',badge:'मुफ़्त',meta:'1 घंटा 48 मिनट',age:'U',g:'linear-gradient(160deg,#134e5e,#71b280)'},
-  {id:4,type:'series',title:'कोटा जंक्शन',access:'vip',badge:'बिंज-योग्य',meta:'सीज़न 1 • 8 एपिसोड',age:'U/A 13+',g:'linear-gradient(160deg,#42275a,#734b6d)'}
+  {id:1,type:'series',title:'मिर्ज़ापुर का साया',access:'vip',badge:'ट्रेंडिंग #1',meta:'सीज़न 1 • 8 एपिसोड',age:'U/A 16+',img:'',g:'linear-gradient(160deg,#0f4c5c,#e36414)'},
+  {id:2,type:'movie',title:'रक्तबीज',access:'ppv',price:49,badge:'नया',meta:'2 घंटे 14 मिनट',age:'U/A 16+',img:'',g:'linear-gradient(160deg,#3a1c71,#d76d77)'},
+  {id:3,type:'movie',title:'बनारस की गलियां',access:'ads',badge:'मुफ़्त',meta:'1 घंटा 48 मिनट',age:'U',img:'',g:'linear-gradient(160deg,#134e5e,#71b280)'},
+  {id:4,type:'series',title:'कोटा जंक्शन',access:'vip',badge:'बिंज-योग्य',meta:'सीज़न 1 • 8 एपिसोड',age:'U/A 13+',img:'',g:'linear-gradient(160deg,#42275a,#734b6d)'}
 ];
 const MICRO = [
-  {id:101,type:'micro',title:'अरबपति का गुप्त विवाह',badge:'एपिसोड 1-3 मुफ़्त',meta:'10 सिक्के / एपिसोड',eps:42,age:'U/A 13+',freeEps:3,g:'linear-gradient(170deg,#c9a27e,#2b2b2b)'},
-  {id:102,type:'micro',title:'माफिया क्वीन',badge:'एक्शन थ्रिलर',meta:'12 सिक्के / एपिसोड',eps:50,age:'U/A 16+',freeEps:3,g:'linear-gradient(170deg,#555,#0d0d0d)'}
+  {id:101,type:'micro',title:'अरबपति का गुप्त विवाह',badge:'एपिसोड 1-3 मुफ़्त',meta:'10 सिक्के / एपिसोड',eps:42,age:'U/A 13+',freeEps:3,img:'',g:'linear-gradient(170deg,#c9a27e,#2b2b2b)'},
+  {id:102,type:'micro',title:'माफिया क्वीन',badge:'एक्शन थ्रिलर',meta:'12 सिक्के / एपिसोड',eps:50,age:'U/A 16+',freeEps:3,img:'',g:'linear-gradient(170deg,#555,#0d0d0d)'}
 ];
 const SAMPLE_VIDEO = 'https://www.w3schools.com/html/mov_bbb.mp4'; // अपना वीडियो लिंक यहाँ डालें
 
 const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 const store = {
   get(k, d){ try{ return JSON.parse(localStorage.getItem(k)) ?? d }catch(e){ return d } },
   set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)) }catch(e){} }
 };
+
 let favs = store.get('myott_favs', []);
 let premium = store.get('myott_premium', false);
+let ppv = store.get('myott_ppv', {});
 let user = store.get('myott_user', null);
 let filter = 'all', query = '';
 
+const isNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform())
+  || /; wv\)/.test(navigator.userAgent);
+const cloud = { ready:false, auth:null, db:null };
+
+/* ---------- स्टोरेज: फ़ोन + (लॉगिन होने पर) क्लाउड ---------- */
+function persist(){
+  store.set('myott_favs', favs);
+  store.set('myott_premium', premium);
+  store.set('myott_ppv', ppv);
+  if(cloud.ready && user && user.uid){
+    cloud.db.collection('users').doc(user.uid).set({
+      name: user.name, email: user.email || null, photo: user.photo || null,
+      favs, premium, ppv,
+      updated: firebase.firestore.FieldValue.serverTimestamp()
+    }, {merge:true}).catch(() => toast('क्लाउड में सेव नहीं हो पाया'));
+  }
+}
+
+function initCloud(){
+  if(!window.FIREBASE_CONFIG || typeof firebase === 'undefined') return;
+  try{
+    firebase.initializeApp(window.FIREBASE_CONFIG);
+    cloud.auth = firebase.auth();
+    cloud.db = firebase.firestore();
+    cloud.ready = true;
+    cloud.auth.onAuthStateChanged(onAuth);
+  }catch(e){ console.warn('Firebase चालू नहीं हुआ', e); }
+}
+
+async function onAuth(u){
+  if(!u){
+    if(user && !user.uid) return;          // नाम वाला डेमो लॉगिन रहने दें
+    user = null; store.set('myott_user', null); render(); return;
+  }
+  user = {uid:u.uid, name:u.displayName || u.email || 'दोस्त', email:u.email, photo:u.photoURL};
+  store.set('myott_user', user);
+  try{
+    const snap = await cloud.db.collection('users').doc(u.uid).get();
+    const d = snap.exists ? snap.data() : {};
+    favs = [...new Set([...(d.favs || []), ...favs])];
+    premium = !!d.premium || premium;
+    ppv = Object.assign({}, d.ppv || {}, ppv);
+  }catch(e){ toast('क्लाउड से डेटा नहीं मिला'); console.warn(e); }
+  persist();
+  render();
+}
+
+async function signOut(){
+  try{ if(cloud.ready) await cloud.auth.signOut(); }catch(e){}
+  user = null; favs = []; premium = false; ppv = {};
+  store.set('myott_user', null); persist();
+  closeModal(); render(); toast('साइन आउट हो गए');
+}
+
+/* ---------- UI ---------- */
+const bg = c => c.img ? `url('${c.img}') center/cover, ${c.g}` : c.g;
 const accessLabel = c => ({
   free:'मुफ़्त', ads:'विज्ञापन समर्थित', vip:'VIP सब्सक्रिप्शन', ppv:`PPV • ₹${c.price}`
 }[c.access] || c.meta);
@@ -32,8 +92,8 @@ function card(c){
   const left = micro ? `${c.eps} एपिसोड` : c.meta;
   const sub = micro ? c.meta : accessLabel(c);
   return `<div class="card" data-id="${c.id}">
-    <div class="poster ${micro?'v':''}" style="background:${c.g}">
-      <span class="badge ${micro&&c.id===102?'':micro?'pink':''}" ${micro?'style="background:var(--pink)"':''}>${c.badge}</span>
+    <div class="poster ${micro?'v':''}" style="background:${bg(c)}">
+      <span class="badge" ${micro?'style="background:var(--pink)"':''}>${c.badge}</span>
       <div class="big">${micro?'🎭':c.type==='movie'?'🎬':'📺'}</div>
       <div class="pmeta"><span>${left}</span><span>${c.age}</span></div>
     </div>
@@ -42,6 +102,14 @@ function card(c){
       <button class="heart ${favs.includes(c.id)?'on':''}" data-fav="${c.id}" aria-label="पसंद">${favs.includes(c.id)?'♥':'♡'}</button>
     </div>
   </div>`;
+}
+
+function renderFeature(){
+  const c = DATA[0];
+  $('#fposter').style.background = bg(c);
+  $('#fbadge').textContent = c.badge;
+  $('#ftitle').textContent = c.title;
+  $('#fmeta').textContent = c.meta + ' • ' + c.age;
 }
 
 function render(){
@@ -59,7 +127,7 @@ function render(){
 
 function toast(msg){
   const t = document.createElement('div'); t.className='toast'; t.textContent=msg;
-  document.body.appendChild(t); setTimeout(()=>t.remove(), 2200);
+  document.body.appendChild(t); setTimeout(()=>t.remove(), 2600);
 }
 function openModal(html){ $('#modal').innerHTML = `<button class="x" id="mx">×</button>${html}`; $('#overlay').hidden = false; $('#mx').onclick = closeModal; }
 function closeModal(){ $('#overlay').hidden = true; $('#modal').innerHTML=''; }
@@ -79,12 +147,43 @@ function premiumModal(){
 
 function signInModal(){
   if(user){
-    openModal(`<h3>नमस्ते, ${user.name}</h3><p class="muted">${premium?'आप प्रीमियम सदस्य हैं ♛':'आप फ्री प्लान पर हैं।'}</p>
+    openModal(`<h3>नमस्ते, ${esc(user.name)}</h3>
+      <p class="muted">${premium?'आप प्रीमियम सदस्य हैं ♛':'आप फ्री प्लान पर हैं।'}</p>
+      <p class="muted">${user.uid?'आपका डेटा क्लाउड में सुरक्षित है।':'डेटा सिर्फ़ इसी फ़ोन में है।'}</p>
       <button class="btn light wide" id="out">साइन आउट</button>`);
-    $('#out').onclick = () => { user=null; store.set('myott_user',null); closeModal(); render(); toast('साइन आउट हो गए'); };
+    $('#out').onclick = signOut;
     return;
   }
+  if(cloud.ready){
+    openModal(`<h3>साइन इन करें</h3><p class="muted">अपने Google खाते से लॉगिन करें। पसंद और प्रीमियम हर फ़ोन पर साथ रहेंगे।</p>
+      <button class="btn light wide" id="g"><span class="gmark">G</span>Google से लॉगिन</button>`);
+    $('#g').onclick = async () => {
+      try{
+        if(isNative){
+          // APK: असली (native) Google लॉगिन
+          const plug = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.FirebaseAuthentication;
+          if(!plug) throw {code:'native/plugin-missing'};
+          const r = await plug.signInWithGoogle();
+          const idToken = r && r.credential && r.credential.idToken;
+          if(!idToken) throw {code:'native/no-token'};
+          await cloud.auth.signInWithCredential(firebase.auth.GoogleAuthProvider.credential(idToken));
+        }else{
+          await cloud.auth.signInWithPopup(new firebase.auth.GoogleAuthProvider());
+        }
+        closeModal(); toast('लॉगिन हो गया');
+      }catch(e){
+        console.warn(e);
+        const c = e && (e.code || e.message) || '';
+        toast(c === 'auth/unauthorized-domain' ? 'Firebase में यह डोमेन Authorized करें'
+            : c === 'native/plugin-missing' ? 'इस APK में Google प्लगिन नहीं है'
+            : /cancel|closed/i.test(c) ? 'लॉगिन रद्द हुआ' : 'लॉगिन नहीं हो पाया: ' + String(c).slice(0,60));
+      }
+    };
+    return;
+  }
+  const note = 'क्लाउड सेटअप नहीं है, इसलिए डेटा सिर्फ़ इसी फ़ोन में रहेगा।';
   openModal(`<h3>साइन इन करें</h3><p class="muted">डेमो लॉगिन — कोई पासवर्ड नहीं चाहिए।</p>
+    <p class="muted" style="font-size:14px;margin-top:6px">${note}</p>
     <input class="input" id="nm" placeholder="आपका नाम">
     <button class="btn red wide" id="go">जारी रखें</button>`);
   $('#go').onclick = () => {
@@ -111,10 +210,10 @@ function open(id){
     return;
   }
   if(c.access==='vip' && !premium) return premiumModal();
-  if(c.access==='ppv' && !store.get('ppv_'+c.id,false)){
+  if(c.access==='ppv' && !ppv[c.id]){
     openModal(`<h3>${c.title}</h3><p class="muted">यह फिल्म ₹${c.price} में किराये पर उपलब्ध है (डेमो)।</p>
       <button class="btn red wide" id="rent">₹${c.price} में देखें (MOCKED)</button>`);
-    $('#rent').onclick = () => { store.set('ppv_'+c.id,true); play(c); };
+    $('#rent').onclick = () => { ppv[c.id] = true; persist(); play(c); };
     return;
   }
   play(c);
@@ -125,7 +224,7 @@ document.addEventListener('click', e => {
   if(t.closest('[data-fav]')){
     const id = +t.closest('[data-fav]').dataset.fav;
     favs = favs.includes(id) ? favs.filter(x=>x!==id) : [...favs, id];
-    store.set('myott_favs', favs); render(); return;
+    persist(); render(); return;
   }
   const chip = t.closest('.chip[data-f]');
   if(chip){ filter = chip.dataset.f; document.querySelectorAll('.chip[data-f]').forEach(b=>b.classList.toggle('active',b===chip)); render(); return; }
@@ -136,7 +235,7 @@ document.addEventListener('click', e => {
     return play(c, n);
   }
   const buy = t.closest('[data-buy]');
-  if(buy){ premium = true; store.set('myott_premium', true); closeModal(); toast('प्रीमियम चालू हो गया ♛'); render(); return; }
+  if(buy){ premium = true; persist(); closeModal(); toast('प्रीमियम चालू हो गया ♛'); render(); return; }
   const cardEl = t.closest('.card');
   if(cardEl) return open(cardEl.dataset.id);
   if(t.id==='overlay') closeModal();
@@ -146,8 +245,14 @@ $('#q').addEventListener('input', e => { query = e.target.value; render(); });
 $('#signBtn').onclick = signInModal;
 $('#seePremium').onclick = premiumModal;
 $('#ctaBtn').onclick = premiumModal;
-$('#watchNow').onclick = () => $('#mainSec').scrollIntoView();
+$('#watchNow').onclick = () => open(DATA[0].id);
+renderFeature();
 render();
+initCloud();
+
+// शुरुआती परदा: ख़त्म होने पर हटाएँ (टैप करके छोड़ भी सकते हैं)
+const splash = $('#splash');
+if(splash){ const end = () => splash.classList.add('done'); splash.onclick = end; setTimeout(end, 4500); }
 
 // PWA: ऑफ़लाइन कैश + इंस्टॉल (सिर्फ़ https या localhost पर चलता है)
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
