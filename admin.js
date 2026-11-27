@@ -5,11 +5,44 @@
   const GRADS = ['linear-gradient(160deg,#0f4c5c,#e36414)','linear-gradient(160deg,#3a1c71,#d76d77)','linear-gradient(160deg,#134e5e,#71b280)','linear-gradient(160deg,#42275a,#734b6d)','linear-gradient(160deg,#7b1e3a,#f2a516)'];
   const BASE_DATA = DATA.slice(), BASE_MICRO = MICRO.slice();
   const col = () => cloud.db.collection('catalog');
+  const SERVER = 'https://screenbox-server.onrender.com';
   let items = [];
+  let uploading = false;
 
   const isAdmin = () => !!(user && user.email && String(user.email).toLowerCase() === ADMIN_EMAIL);
   const cleanUrl = u => /^https?:\/\//i.test(u || '') ? String(u).trim().replace(/['"()<>\s]/g, c => '%' + c.charCodeAt(0).toString(16).toUpperCase()) : '';
   const errMsg = e => (e && e.code === 'permission-denied') ? 'अनुमति नहीं मिली: Firestore नियम अपडेट करें' : 'गड़बड़ी: ' + String((e && (e.code || e.message)) || '').slice(0, 50);
+
+  /* Cloudinary पर अपलोड: पहले Render सर्वर से (सिर्फ़ एडमिन को) हस्ताक्षर, फिर फ़ाइल सीधे Cloudinary पर */
+  async function uploadToCloud(file, st){
+    const u = cloud.auth.currentUser;
+    if(!u) throw new Error('पहले लॉगिन करें');
+    st.textContent = 'सर्वर से अनुमति ले रहे हैं... (सोया हो तो 1 मिनट तक लग सकता है)';
+    const token = await u.getIdToken();
+    const r = await fetch(SERVER + '/sign', {method: 'POST', headers: {Authorization: 'Bearer ' + token}});
+    if(!r.ok) throw new Error(r.status === 403 ? 'यह खाता एडमिन नहीं है' : 'सर्वर से अनुमति नहीं मिली');
+    const s = await r.json();
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('api_key', s.api_key);
+    fd.append('timestamp', s.timestamp);
+    fd.append('signature', s.signature);
+    fd.append('folder', s.folder);
+    return new Promise((resolve, reject) => {
+      const x = new XMLHttpRequest();
+      x.open('POST', 'https://api.cloudinary.com/v1_1/' + s.cloud_name + '/auto/upload');
+      x.upload.onprogress = e => { if(e.lengthComputable) st.textContent = 'अपलोड हो रहा है: ' + Math.round(e.loaded / e.total * 100) + '%'; };
+      x.onload = () => {
+        try{
+          const j = JSON.parse(x.responseText);
+          if(x.status >= 200 && x.status < 300 && j.secure_url) resolve(j.secure_url);
+          else reject(new Error((j.error && j.error.message) || 'अपलोड नहीं हुआ'));
+        }catch(e){ reject(new Error('अपलोड नहीं हुआ')); }
+      };
+      x.onerror = () => reject(new Error('नेटवर्क में गड़बड़ी'));
+      x.send(fd);
+    });
+  }
 
   function toItem(it){
     const o = {
@@ -117,6 +150,8 @@
     it = it || {};
     const fld = (id, label, val, ph, type) => `<label class="muted" style="font-size:13px;display:block;margin-top:12px">${label}</label>
       <input class="input" style="margin-top:4px" id="${id}" type="${type || 'text'}" value="${esc(val == null ? '' : val)}" placeholder="${esc(ph || '')}">`;
+    const upl = (id, label, val, ph, accept, btn) => fld(id, label, val, ph) +
+      `<button class="btn ghost sm" style="margin-top:8px;max-width:none" data-adm="pick_${id}">${btn}</button><input type="file" id="file_${id}" accept="${accept}" hidden>`;
     const sel = (id, label, opts, cur) => `<label class="muted" style="font-size:13px;display:block;margin-top:12px">${label}</label>
       <select class="input" style="margin-top:4px" id="${id}">${opts.map(o => `<option value="${o[0]}" ${o[0] === cur ? 'selected' : ''}>${o[1]}</option>`).join('')}</select>`;
     openModal(`<h3>${it.docId ? 'बदलाव करें' : 'नया कंटेंट'}</h3>
@@ -127,16 +162,33 @@
       ${fld('f_badge', 'बैज', it.badge, 'जैसे: नया, ट्रेंडिंग #1')}
       ${fld('f_meta', 'जानकारी', it.meta, 'जैसे: सीज़न 1 • 8 एपिसोड')}
       ${fld('f_age', 'उम्र', it.age, 'U/A 16+')}
-      ${fld('f_img', 'पोस्टर फ़ोटो का लिंक', it.img, 'https://...')}
-      ${fld('f_video', 'वीडियो का सीधा लिंक (.mp4)', it.video, 'https://...')}
+      ${upl('f_img', 'पोस्टर फ़ोटो का लिंक', it.img, 'https://...', 'image/*', '📷 फ़ोटो अपलोड करें')}
+      ${upl('f_video', 'वीडियो का सीधा लिंक (.mp4)', it.video, 'https://...', 'video/*', '🎬 वीडियो अपलोड करें')}
+      <div class="muted" id="up_st" style="margin-top:10px;font-size:14px">फ़ोटो 10 MB और वीडियो 100 MB तक। वीडियो MP4 में रखें।</div>
       ${fld('f_eps', 'कुल एपिसोड (सिर्फ़ माइक्रो-ड्रामा)', it.eps || '', '42', 'number')}
       ${fld('f_free', 'मुफ़्त एपिसोड (सिर्फ़ माइक्रो-ड्रामा)', it.freeEps || '', '3', 'number')}
       <label style="display:flex;gap:8px;align-items:center;margin-top:14px"><input type="checkbox" id="f_feat" ${it.featured ? 'checked' : ''}> मुख्य पोस्टर (सबसे ऊपर बड़ा)</label>
       <button class="btn red wide" data-adm="save">सेव करें</button>
       <button class="btn ghost wide" style="margin-top:10px" data-adm="back">रद्द</button>`);
+    [['f_img', 10], ['f_video', 100]].forEach(([id, mb]) => {
+      document.getElementById('file_' + id).onchange = async ev => {
+        const f = ev.target.files[0]; if(!f) return;
+        const st = document.getElementById('up_st');
+        if(f.size > mb * 1024 * 1024){ st.textContent = '✖ फ़ाइल ' + mb + ' MB से बड़ी है'; return; }
+        uploading = true;
+        try{
+          document.getElementById(id).value = await uploadToCloud(f, st);
+          st.textContent = '✔ अपलोड हो गया';
+        }catch(e){ st.textContent = '✖ ' + e.message; }
+        uploading = false;
+      };
+    });
     bind({
       back: adminHome,
+      pick_f_img: () => document.getElementById('file_f_img').click(),
+      pick_f_video: () => document.getElementById('file_f_video').click(),
       save: async () => {
+        if(uploading) return toast('अपलोड पूरा होने दें');
         const v = id => document.getElementById(id).value.trim();
         const type = v('f_type'), title = v('f_title');
         if(!title) return toast('नाम लिखें');
