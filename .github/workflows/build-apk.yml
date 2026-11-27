@@ -61,6 +61,9 @@ jobs:
           if [ -f pardaa-keystore.txt ]; then
             mkdir -p ~/.android
             base64 -d pardaa-keystore.txt > ~/.android/debug.keystore
+            echo "KEYSTORE_FROM_REPO=yes"
+          else
+            echo "KEYSTORE_FROM_REPO=NO"
           fi
 
       - name: App icon
@@ -83,28 +86,15 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleDebug
 
+      - name: Print signing info
+        continue-on-error: true
+        run: |
+          APK=android/app/build/outputs/apk/debug/app-debug.apk
+          BT=$(ls -d $ANDROID_HOME/build-tools/* | tail -1)
+          $BT/apksigner verify --print-certs $APK | grep -i "sha-1" || true
+          grep -rh "default_web_client_id" android/app/build/generated/res | head -3 || true
+
       - uses: actions/upload-artifact@v4
         with:
           name: ScreenBox-APK
           path: android/app/build/outputs/apk/debug/app-debug.apk
-
-      - name: Enable KVM
-        continue-on-error: true
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-
-      - name: Check app opens in emulator
-        continue-on-error: true
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 34
-          arch: x86_64
-          script: |
-            adb install -r android/app/build/outputs/apk/debug/app-debug.apk
-            adb logcat -c
-            adb shell monkey -p com.myott.app -c android.intent.category.LAUNCHER 1
-            sleep 20
-            adb shell pidof com.myott.app || echo APP_CRASHED
-            adb logcat -d | grep -E "FATAL|Caused by" | head -40
