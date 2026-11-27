@@ -28,35 +28,23 @@ jobs:
       - name: Create Android project
         run: |
           npm init -y
-          npm install @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6 @capacitor-firebase/authentication@6 firebase@10
+          npm install @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6
           cat > capacitor.config.json <<'EOT'
           {
             "appId": "com.myott.app",
             "appName": "ScreenBox",
             "webDir": "www",
-            "backgroundColor": "#220509",
-            "plugins": {
-              "FirebaseAuthentication": {
-                "skipNativeAuth": true,
-                "providers": ["google.com"]
-              }
-            }
+            "backgroundColor": "#220509"
           }
           EOT
           npx cap add android
 
-      - name: Firebase file and fixed signing key
+      - name: Fixed signing key
         run: |
-          if [ -f google-services.json ]; then
-            cp google-services.json android/app/google-services.json
-          else
-            echo "google-services.json not found, Google login will not work"
-          fi
           if [ -f pardaa-keystore.txt ]; then
             mkdir -p ~/.android
             base64 -d pardaa-keystore.txt > ~/.android/debug.keystore
           fi
-          keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android 2>/dev/null | grep SHA1 || true
 
       - name: App icon
         continue-on-error: true
