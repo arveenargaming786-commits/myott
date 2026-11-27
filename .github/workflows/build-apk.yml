@@ -58,13 +58,23 @@ jobs:
               implementation 'com.google.android.gms:play-services-auth:21.2.0'
           }
           EOT
-          if [ -f pardaa-keystore.txt ]; then
-            mkdir -p ~/.android
-            base64 -d pardaa-keystore.txt > ~/.android/debug.keystore
-            echo "KEYSTORE_FROM_REPO=yes"
-          else
-            echo "KEYSTORE_FROM_REPO=NO"
-          fi
+          mkdir -p ~/.android
+          base64 -d pardaa-keystore.txt > ~/.android/debug.keystore
+          cp ~/.android/debug.keystore android/app/pardaa.keystore
+          cat >> android/app/build.gradle <<'EOT'
+
+          android {
+              signingConfigs {
+                  debug {
+                      storeFile file('pardaa.keystore')
+                      storePassword 'android'
+                      keyAlias 'androiddebugkey'
+                      keyPassword 'android'
+                  }
+              }
+          }
+          EOT
+          keytool -list -v -keystore android/app/pardaa.keystore -alias androiddebugkey -storepass android | grep SHA1
 
       - name: App icon
         continue-on-error: true
