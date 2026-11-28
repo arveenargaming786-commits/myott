@@ -149,12 +149,14 @@
       const r = await showRewarded();
       if(r === false){ closeModal(); toast('पूरा विज्ञापन देखने पर ही एपिसोड खुलेगा'); return epList(c); }
       if(r === 'fail') toast('विज्ञापन नहीं मिला, एपिसोड खोल रहे हैं');
+      if(r === true && plug('AdMob')) bump({adsWatched: 1});
       unlocked.add(key);
     }
     playEpisode(c, n);
   }
 
   function playEpisode(c, n){
+    trackView(c);
     const total = epCount(c);
     const url = (c.episodes && c.episodes[n - 1]) || c.video || SAMPLE_VIDEO;
     openModal(`<h3>${c.title}</h3><p class="muted">एपिसोड ${n} / ${total}</p>
@@ -175,6 +177,73 @@
     if(epCount(c)) return epList(c);
     play(c);
   };
+
+  /* ---------- व्यू / विज्ञापन गिनती (हर यूज़र के अपने दस्तावेज़ में) ---------- */
+  function bump(o){
+    if(!(cloud.ready && user && user.uid)) return;
+    const inc = firebase.firestore.FieldValue.increment;
+    const d = {};
+    if(o.adsWatched) d.adsWatched = inc(o.adsWatched);
+    if(o.view){ d.viewsTotal = inc(1); d.views = {[o.view]: inc(1)}; }
+    cloud.db.collection('users').doc(user.uid).set(d, {merge: true}).catch(() => {});
+  }
+  const trackView = c => bump({view: String(c.id)});
+  const _play2 = play;
+  play = function(c){ trackView(c); return _play2.apply(this, arguments); };
+
+  /* ---------- एडमिन डैशबोर्ड (प्रोफ़ाइल में) ---------- */
+  const ADMIN = 'arveenargaming786@gmail.com';
+  const isAdm = () => !!(user && user.email && String(user.email).toLowerCase() === ADMIN);
+  const inr = n => '₹' + (Math.round(n * 100) / 100).toLocaleString('en-IN');
+  const getRate = () => { try{ return Number(localStorage.getItem('sb_ecpm')) || 150; }catch(e){ return 150; } };
+
+  async function dashboard(){
+    openModal('<h3>डैशबोर्ड</h3><p class="muted">लोड हो रहा है...</p>');
+    let users = [];
+    try{ users = (await cloud.db.collection('users').get()).docs.map(d => d.data()); }
+    catch(e){ closeModal(); return toast('डेटा नहीं मिला: Firestore नियम देखें'); }
+    const all = [...DATA, ...MICRO];
+    const views = {}; let ads = 0, total = 0;
+    users.forEach(u => {
+      ads += Number(u.adsWatched) || 0;
+      total += Number(u.viewsTotal) || 0;
+      Object.entries(u.views || {}).forEach(([k, v]) => { views[k] = (views[k] || 0) + (Number(v) || 0); });
+    });
+    const top = Object.entries(views).sort((a, b) => b[1] - a[1]).slice(0, 5);
+    const max = top.length ? top[0][1] : 1;
+    const nm = id => { const c = all.find(x => String(x.id) === String(id)); return c ? c.title : 'हटाया हुआ कंटेंट'; };
+    const nFilm = all.filter(x => x.type === 'movie').length;
+    const nSer = all.filter(x => x.type === 'series').length;
+    const nMic = all.filter(x => x.type === 'micro').length;
+    const rate = getRate();
+    const box = (v, l) => `<div class="plan" style="margin:0;padding:14px;text-align:center"><div style="font-size:28px;font-weight:700;color:var(--gold2)">${v}</div><div class="muted" style="font-size:13px">${l}</div></div>`;
+    openModal(`<p class="eyebrow gold">ADMIN</p><h3>नमस्ते, ${esc(user.name)}</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px">
+        ${box(all.length, 'कुल कंटेंट')}${box(users.length, 'कुल सदस्य')}
+        ${box(total, 'कुल व्यूज़')}${box(ads, 'विज्ञापन देखे गए')}
+      </div>
+      <div class="muted" style="font-size:13px;margin-top:8px">फ़िल्में ${nFilm} • सीरीज़ ${nSer} • माइक्रो-ड्रामा ${nMic}</div>
+
+      <div class="plan gold" style="margin-top:16px">
+        <h4>💰 अनुमानित कमाई</h4>
+        <div class="price">${inr(ads / 1000 * rate)}</div>
+        <p class="muted" style="font-size:13px">${ads} विज्ञापन × ₹<input id="ecpm" type="number" value="${rate}" style="width:70px;background:#12060a;color:#fff;border:1px solid rgba(242,165,22,.4);border-radius:8px;padding:2px 6px"> प्रति 1000 विज्ञापन (eCPM, अंदाज़ा)</p>
+        <p class="muted" style="font-size:13px;margin-top:6px">असली कमाई AdMob ऐप/वेबसाइट में दिखती है। प्रीमियम से कमाई: ₹0 (अभी बंद)।</p>
+      </div>
+
+      <h4 style="margin-top:18px">🔥 सबसे ज़्यादा देखे गए</h4>
+      ${top.length ? top.map(([id, v]) => `<div style="margin-top:10px"><div style="display:flex;justify-content:space-between;font-size:15px"><span>${esc(nm(id))}</span><b>${v}</b></div><div style="height:8px;border-radius:6px;background:#2a0d13;margin-top:4px"><div style="height:8px;border-radius:6px;width:${Math.max(6, v / max * 100)}%;background:linear-gradient(90deg,var(--gold),var(--gold2))"></div></div></div>`).join('')
+        : '<p class="muted" style="margin-top:8px">अभी कोई व्यू नहीं। यूज़र के वीडियो देखते ही यहाँ दिखेगा।</p>'}
+
+      <button class="btn red wide" id="d_adm">⚙ एडमिन पैनल (कंटेंट जोड़ें/बदलें)</button>
+      <button class="btn ghost wide" style="margin-top:10px" id="d_out">साइन आउट</button>`);
+    document.getElementById('ecpm').onchange = e => { try{ localStorage.setItem('sb_ecpm', String(Number(e.target.value) || 150)); }catch(_){} dashboard(); };
+    document.getElementById('d_adm').onclick = () => { closeModal(); const b = document.getElementById('adminBtn'); if(b) b.click(); };
+    document.getElementById('d_out').onclick = signOut;
+  }
+
+  const sb = document.getElementById('signBtn');
+  if(sb) sb.onclick = () => { if(isAdm()) dashboard(); else signInModal(); };
 
   render();
 })();
