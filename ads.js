@@ -157,6 +157,7 @@
 
   function playEpisode(c, n){
     trackView(c);
+    { const k = c.id + ':' + n; if(!seenE.has(k)){ seenE.add(k); bump({ep: [String(c.id), String(n)]}); } }
     const total = epCount(c);
     const url = (c.episodes && c.episodes[n - 1]) || c.video || SAMPLE_VIDEO;
     openModal(`<h3>${c.title}</h3><p class="muted">एपिसोड ${n} / ${total}</p>
@@ -184,10 +185,11 @@
     const inc = firebase.firestore.FieldValue.increment;
     const d = {};
     if(o.adsWatched) d.adsWatched = inc(o.adsWatched);
-    if(o.view){ d.views = {[o.view]: 1}; }  // एक ईमेल = एक कंटेंट पर सिर्फ़ 1 व्यू
+    if(o.view){ d.views = {[o.view]: 1}; }
+    if(o.ep){ d.eps = {[o.ep[0]]: {[o.ep[1]]: 1}}; }  // एक ईमेल = एक कंटेंट पर सिर्फ़ 1 व्यू
     cloud.db.collection('users').doc(user.uid).set(d, {merge: true}).catch(() => {});
   }
-  const seenV = new Set();
+  const seenV = new Set(), seenE = new Set();
   const trackView = c => { const k = String(c.id); if(seenV.has(k)) return; seenV.add(k); bump({view: k}); };
   const _play2 = play;
   play = function(c){ trackView(c); return _play2.apply(this, arguments); };
@@ -204,9 +206,10 @@
     try{ users = (await cloud.db.collection('users').get()).docs.map(d => d.data()); }
     catch(e){ closeModal(); return toast('डेटा नहीं मिला: Firestore नियम देखें'); }
     const all = [...DATA, ...MICRO];
-    const views = {}; let ads = 0, total = 0;
+    const views = {}, epw = {}; let ads = 0, total = 0, epTotal = 0;
     users.forEach(u => {
       ads += Number(u.adsWatched) || 0;
+      Object.entries(u.eps || {}).forEach(([k, m]) => { const n = Object.keys(m || {}).length; epw[k] = (epw[k] || 0) + n; epTotal += n; });
       Object.entries(u.views || {}).forEach(([k, v]) => { if(Number(v) > 0){ views[k] = (views[k] || 0) + 1; total++; } });
     });
     const top = Object.entries(views).sort((a, b) => b[1] - a[1]).slice(0, 5);
@@ -220,7 +223,8 @@
     openModal(`<p class="eyebrow gold">ADMIN</p><h3>नमस्ते, ${esc(user.name)}</h3>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px">
         ${box(all.length, 'कुल कंटेंट')}${box(users.length, 'कुल सदस्य')}
-        ${box(total, 'कुल व्यूज़')}${box(ads, 'विज्ञापन देखे गए')}
+        ${box(total, 'कुल व्यूज़ (1 ईमेल = 1)')}${box(epTotal, 'एपिसोड देखे गए')}
+        ${box(ads, 'विज्ञापन देखे गए')}${box(users.length ? (epTotal / users.length).toFixed(1) : 0, 'प्रति सदस्य एपिसोड')}
       </div>
       <div class="muted" style="font-size:13px;margin-top:8px">फ़िल्में ${nFilm} • सीरीज़ ${nSer} • माइक्रो-ड्रामा ${nMic}</div>
 
@@ -232,7 +236,7 @@
       </div>
 
       <h4 style="margin-top:18px">🔥 सबसे ज़्यादा देखे गए</h4>
-      ${top.length ? top.map(([id, v]) => `<div style="margin-top:10px"><div style="display:flex;justify-content:space-between;font-size:15px"><span>${esc(nm(id))}</span><b>${v}</b></div><div style="height:8px;border-radius:6px;background:#2a0d13;margin-top:4px"><div style="height:8px;border-radius:6px;width:${Math.max(6, v / max * 100)}%;background:linear-gradient(90deg,var(--gold),var(--gold2))"></div></div></div>`).join('')
+      ${top.length ? top.map(([id, v]) => `<div style="margin-top:10px"><div style="display:flex;justify-content:space-between;font-size:15px"><span>${esc(nm(id))}</span><b>${v} दर्शक${epw[id] ? ' • ' + epw[id] + ' एपिसोड' : ''}</b></div><div style="height:8px;border-radius:6px;background:#2a0d13;margin-top:4px"><div style="height:8px;border-radius:6px;width:${Math.max(6, v / max * 100)}%;background:linear-gradient(90deg,var(--gold),var(--gold2))"></div></div></div>`).join('')
         : '<p class="muted" style="margin-top:8px">अभी कोई व्यू नहीं। यूज़र के वीडियो देखते ही यहाँ दिखेगा।</p>'}
 
       <button class="btn red wide" id="d_adm">⚙ एडमिन पैनल (कंटेंट जोड़ें/बदलें)</button>
