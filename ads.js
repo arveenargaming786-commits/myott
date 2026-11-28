@@ -15,6 +15,9 @@
   const css = document.createElement('style');
   css.textContent = `
     #seePremium,.cta{display:none!important}
+    .overlay{align-items:flex-start!important;padding-bottom:90px}
+    .modal{margin:auto}
+    .overlay:not([hidden]) ~ #adminBtn{display:none}
     #gate{position:fixed;inset:0;z-index:150;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:24px;text-align:center;background:radial-gradient(ellipse at 50% 18%,#4a0814 0,#150508 72%)}
     #gate[hidden]{display:none}
     #gate img{width:76px;height:76px;border-radius:20px;box-shadow:0 0 28px rgba(242,165,22,.45)}
