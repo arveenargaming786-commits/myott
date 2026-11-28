@@ -249,8 +249,62 @@
     document.getElementById('d_out').onclick = signOut;
   }
 
+  /* ---------- खाता और डेटा हटाना ---------- */
+  async function reauth(){
+    const u = cloud.auth.currentUser;
+    if(isNative){
+      const p = plug('FirebaseAuthentication');
+      if(!p) throw {code: 'native/plugin-missing'};
+      const r = await p.signInWithGoogle();
+      const t = r && r.credential && r.credential.idToken;
+      if(!t) throw {code: 'native/no-token'};
+      await u.reauthenticateWithCredential(firebase.auth.GoogleAuthProvider.credential(t));
+    }else{
+      await u.reauthenticateWithPopup(new firebase.auth.GoogleAuthProvider());
+    }
+  }
+
+  function deleteConfirm(){
+    openModal(`<h3>खाता हटाएँ?</h3>
+      <p class="muted">आपका खाता, पसंद की सूची और देखने की सारी जानकारी हमेशा के लिए हट जाएगी। यह वापस नहीं हो सकेगा।</p>
+      <p class="muted" style="margin-top:8px">पुष्टि के लिए आपसे Google से एक बार फिर साइन इन करवाया जाएगा।</p>
+      <p id="del_err" style="color:#ffb4b4;font-size:14px;min-height:20px;margin-top:8px"></p>
+      <button class="btn red wide" id="del_yes">हाँ, मेरा खाता हटाएँ</button>
+      <button class="btn ghost wide" style="margin-top:10px" id="del_no">रद्द करें</button>`);
+    document.getElementById('del_no').onclick = closeModal;
+    document.getElementById('del_yes').onclick = async () => {
+      const err = document.getElementById('del_err'), btn = document.getElementById('del_yes');
+      err.textContent = ''; btn.disabled = true;
+      try{
+        const u = cloud.auth.currentUser;
+        if(!u) throw {code: 'no-user'};
+        await reauth();
+        await cloud.db.collection('users').doc(u.uid).delete();
+        await u.delete();
+        try{ const p = plug('FirebaseAuthentication'); if(p) await p.signOut(); }catch(e){}
+        await signOut();
+        toast('आपका खाता और डेटा हटा दिया गया');
+      }catch(e){
+        btn.disabled = false;
+        const c = (e && (e.code || e.message)) || '';
+        err.textContent = /cancel|closed/i.test(c) ? 'हटाना रद्द हुआ' : 'नहीं हट पाया: ' + String(c).slice(0, 60) + '। दोबारा कोशिश करें।';
+      }
+    };
+  }
+
+  const delBtnHtml = '<button class="btn ghost wide" style="margin-top:10px;border-color:#b3152e;color:#ffb4b4" id="del_open">🗑 मेरा खाता और डेटा हटाएँ</button>';
+  const addDelBtn = () => {
+    const m = document.getElementById('modal');
+    if(!m || document.getElementById('del_open')) return;
+    m.insertAdjacentHTML('beforeend', delBtnHtml);
+    document.getElementById('del_open').onclick = deleteConfirm;
+  };
+
   const sb = document.getElementById('signBtn');
-  if(sb) sb.onclick = () => { if(isAdm()) dashboard(); else signInModal(); };
+  if(sb) sb.onclick = () => {
+    if(isAdm()){ dashboard().then(addDelBtn); }
+    else{ signInModal(); if(user) addDelBtn(); }
+  };
 
   /* ---------- नियम व शर्तें + प्राइवेसी नीति ---------- */
   const MAIL = 'arveenargaming786@gmail.com';
@@ -269,7 +323,7 @@
       ['क्यों लेते हैं', 'आपका खाता पहचानने, पसंद हर फ़ोन पर साथ रखने और ऐप कैसा चल रहा है यह समझने के लिए।'],
       ['कहाँ रखी जाती है', 'जानकारी Google Firebase के सर्वर पर सुरक्षित रखी जाती है। हम इसे किसी को बेचते नहीं हैं।'],
       ['विज्ञापन', 'ऐप में Google AdMob के विज्ञापन आते हैं। AdMob आपके फ़ोन का विज्ञापन ID इस्तेमाल कर सकता है। इसे फ़ोन की सेटिंग में बंद किया जा सकता है।'],
-      ['आपके अधिकार', 'अपनी जानकारी देखने या हटवाने के लिए ' + MAIL + ' पर लिखें।'],
+      ['आपके अधिकार', 'ऐप में प्रोफ़ाइल खोलकर "मेरा खाता और डेटा हटाएँ" दबाने से आपका खाता और सारा डेटा हट जाता है। या ' + MAIL + ' पर लिखें।'],
       ['बच्चे', 'यह ऐप 13 साल से छोटे बच्चों के लिए नहीं है।']
     ]]
   };
