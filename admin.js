@@ -49,9 +49,10 @@
       id: Number(it.id), type: it.type || 'movie', title: esc(it.title || ''), access: it.access || 'free',
       price: Number(it.price) || 0, badge: esc(it.badge || 'नया'), meta: esc(it.meta || ''), age: esc(it.age || 'U/A 13+'),
       img: cleanUrl(it.img), video: cleanUrl(it.video), featured: !!it.featured,
+      episodes: (Array.isArray(it.episodes) ? it.episodes : []).map(cleanUrl).filter(Boolean),
       g: GRADS[Math.abs(Number(it.id) || 0) % GRADS.length]
     };
-    if(o.type === 'micro'){ o.eps = Number(it.eps) || 10; o.freeEps = Number(it.freeEps) || 3; }
+    if(o.type === 'micro'){ o.eps = o.episodes.length || Number(it.eps) || 0; }
     return o;
   }
 
@@ -165,11 +166,43 @@
       ${upl('f_img', 'पोस्टर फ़ोटो का लिंक', it.img, 'https://...', 'image/*', '📷 फ़ोटो अपलोड करें')}
       ${upl('f_video', 'वीडियो का सीधा लिंक (.mp4)', it.video, 'https://...', 'video/*', '🎬 वीडियो अपलोड करें')}
       <div class="muted" id="up_st" style="margin-top:10px;font-size:14px">फ़ोटो 10 MB और वीडियो 100 MB तक। वीडियो MP4 में रखें।</div>
-      ${fld('f_eps', 'कुल एपिसोड (सिर्फ़ माइक्रो-ड्रामा)', it.eps || '', '42', 'number')}
-      ${fld('f_free', 'मुफ़्त एपिसोड (सिर्फ़ माइक्रो-ड्रामा)', it.freeEps || '', '3', 'number')}
+      <label class="muted" style="font-size:13px;display:block;margin-top:16px">एपिसोड (सीरीज़ / माइक्रो-ड्रामा के लिए। फिल्म के लिए ऊपर वाला वीडियो काफ़ी है)</label>
+      <div id="ep_box"></div>
+      <button class="btn ghost sm" style="margin-top:10px;max-width:none" data-adm="addep">➕ एपिसोड जोड़ें</button>
       <label style="display:flex;gap:8px;align-items:center;margin-top:14px"><input type="checkbox" id="f_feat" ${it.featured ? 'checked' : ''}> मुख्य पोस्टर (सबसे ऊपर बड़ा)</label>
       <button class="btn red wide" data-adm="save">सेव करें</button>
       <button class="btn ghost wide" style="margin-top:10px" data-adm="back">रद्द</button>`);
+    let eps = Array.isArray(it.episodes) ? it.episodes.slice() : [];
+    const syncEps = () => document.querySelectorAll('#ep_box .ep_url').forEach((inp, i) => { eps[i] = inp.value.trim(); });
+    function renderEps(){
+      document.getElementById('ep_box').innerHTML = eps.map((u, i) => `
+        <div class="plan" style="margin-top:10px;padding:12px">
+          <b>एपिसोड ${i + 1}</b>
+          <input class="input ep_url" style="margin-top:8px" value="${esc(u)}" placeholder="वीडियो का लिंक (https://...)">
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <button class="btn ghost sm" style="max-width:none" data-epu="${i}">🎬 अपलोड</button>
+            <button class="btn ghost sm" style="max-width:none" data-epd="${i}">✖ हटाएँ</button>
+          </div>
+          <input type="file" accept="video/*" id="epfile_${i}" hidden>
+        </div>`).join('');
+      document.querySelectorAll('#ep_box [data-epu]').forEach(b => { b.onclick = () => document.getElementById('epfile_' + b.dataset.epu).click(); });
+      document.querySelectorAll('#ep_box [data-epd]').forEach(b => { b.onclick = () => { syncEps(); eps.splice(Number(b.dataset.epd), 1); renderEps(); }; });
+      eps.forEach((_, i) => {
+        document.getElementById('epfile_' + i).onchange = async ev => {
+          const f = ev.target.files[0]; if(!f) return;
+          const st = document.getElementById('up_st');
+          if(f.size > 100 * 1024 * 1024){ st.textContent = '✖ फ़ाइल 100 MB से बड़ी है'; return; }
+          uploading = true;
+          try{
+            const url = await uploadToCloud(f, st);
+            document.querySelectorAll('#ep_box .ep_url')[i].value = url;
+            st.textContent = '✔ एपिसोड ' + (i + 1) + ' अपलोड हो गया';
+          }catch(e){ st.textContent = '✖ ' + e.message; }
+          uploading = false;
+        };
+      });
+    }
+    renderEps();
     [['f_img', 10], ['f_video', 100]].forEach(([id, mb]) => {
       document.getElementById('file_' + id).onchange = async ev => {
         const f = ev.target.files[0]; if(!f) return;
@@ -187,8 +220,11 @@
       back: adminHome,
       pick_f_img: () => document.getElementById('file_f_img').click(),
       pick_f_video: () => document.getElementById('file_f_video').click(),
+      addep: () => { syncEps(); eps.push(''); renderEps(); },
       save: async () => {
         if(uploading) return toast('अपलोड पूरा होने दें');
+        syncEps();
+        const episodes = eps.filter(Boolean);
         const v = id => document.getElementById(id).value.trim();
         const type = v('f_type'), title = v('f_title');
         if(!title) return toast('नाम लिखें');
@@ -197,7 +233,7 @@
           await col().doc(String(id)).set({
             id, type, title, access: type === 'micro' ? 'free' : v('f_access'), price: Number(v('f_price')) || 0,
             badge: v('f_badge'), meta: v('f_meta'), age: v('f_age') || 'U/A 13+', img: v('f_img'), video: v('f_video'),
-            eps: Number(v('f_eps')) || 0, freeEps: Number(v('f_free')) || 0,
+            episodes, eps: episodes.length,
             featured: document.getElementById('f_feat').checked
           });
           await loadCatalog(); toast('सेव हो गया'); adminHome();
