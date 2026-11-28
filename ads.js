@@ -184,10 +184,11 @@
     const inc = firebase.firestore.FieldValue.increment;
     const d = {};
     if(o.adsWatched) d.adsWatched = inc(o.adsWatched);
-    if(o.view){ d.viewsTotal = inc(1); d.views = {[o.view]: inc(1)}; }
+    if(o.view){ d.views = {[o.view]: 1}; }  // एक ईमेल = एक कंटेंट पर सिर्फ़ 1 व्यू
     cloud.db.collection('users').doc(user.uid).set(d, {merge: true}).catch(() => {});
   }
-  const trackView = c => bump({view: String(c.id)});
+  const seenV = new Set();
+  const trackView = c => { const k = String(c.id); if(seenV.has(k)) return; seenV.add(k); bump({view: k}); };
   const _play2 = play;
   play = function(c){ trackView(c); return _play2.apply(this, arguments); };
 
@@ -206,8 +207,7 @@
     const views = {}; let ads = 0, total = 0;
     users.forEach(u => {
       ads += Number(u.adsWatched) || 0;
-      total += Number(u.viewsTotal) || 0;
-      Object.entries(u.views || {}).forEach(([k, v]) => { views[k] = (views[k] || 0) + (Number(v) || 0); });
+      Object.entries(u.views || {}).forEach(([k, v]) => { if(Number(v) > 0){ views[k] = (views[k] || 0) + 1; total++; } });
     });
     const top = Object.entries(views).sort((a, b) => b[1] - a[1]).slice(0, 5);
     const max = top.length ? top[0][1] : 1;
