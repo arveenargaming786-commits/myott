@@ -343,7 +343,7 @@
     };
   }
 
-  const delBtnHtml = '<button class="btn ghost wide" style="margin-top:10px;border-color:#b3152e;color:#ffb4b4" id="del_open">🗑 मेरा खाता और डेटा हटाएँ</button>';
+  const delBtnHtml = '<div style="text-align:center;margin-top:34px"><a id="del_open" style="font-size:11px;font-weight:300;color:#8a6f76;opacity:.7;text-decoration:underline;cursor:pointer">खाता हटाएँ</a></div>';
   const addDelBtn = () => {
     const m = document.getElementById('modal');
     if(!m || document.getElementById('del_open')) return;
@@ -353,7 +353,7 @@
 
   const sb = document.getElementById('signBtn');
   if(sb) sb.onclick = () => {
-    if(isAdm()){ dashboard().then(addDelBtn); }
+    if(isAdm()){ dashboard(); }
     else{ signInModal(); if(user) addDelBtn(); }
   };
 
