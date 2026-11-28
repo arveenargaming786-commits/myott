@@ -35,6 +35,10 @@ jobs:
             "appName": "ScreenBox",
             "webDir": "www",
             "backgroundColor": "#220509",
+            "server": {
+              "url": "https://arveenargaming786-commits.github.io/myott/",
+              "cleartext": false
+            },
             "plugins": {
               "FirebaseAuthentication": {
                 "skipNativeAuth": true,
