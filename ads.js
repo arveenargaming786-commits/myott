@@ -15,7 +15,9 @@
   const css = document.createElement('style');
   css.textContent = `
     #seePremium,.cta{display:none!important}
-    .overlay{align-items:flex-start!important;padding-bottom:90px}
+    .overlay{align-items:flex-start!important;padding-bottom:90px;z-index:160!important}
+    #gate .legal{font-size:13px;max-width:300px;margin-top:6px}
+    #gate .legal a,footer .legal a{color:var(--gold2);text-decoration:underline;cursor:pointer}
     .modal{margin:auto}
     .overlay:not([hidden]) ~ #adminBtn{display:none}
     #gate{position:fixed;inset:0;z-index:150;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:24px;text-align:center;background:radial-gradient(ellipse at 50% 18%,#4a0814 0,#150508 72%)}
@@ -33,7 +35,8 @@
   gate.innerHTML = `<img src="icon-192.png" alt=""><div class="wordmark">ScreenBox</div>
     <p>आपका अपना स्ट्रीमिंग मंच</p>
     <button class="btn light" id="gate_btn"><span class="gmark">G</span>Google से साइन इन करें</button>
-    <p id="gate_err"></p>`;
+    <p id="gate_err"></p>
+    <p class="legal">साइन इन करके आप हमारी <a data-legal="terms">नियम व शर्तें</a> और <a data-legal="privacy">प्राइवेसी नीति</a> मानते हैं।</p>`;
   document.body.appendChild(gate);
   const syncGate = () => { gate.hidden = !cloud.ready || !!user; };
 
@@ -248,6 +251,45 @@
 
   const sb = document.getElementById('signBtn');
   if(sb) sb.onclick = () => { if(isAdm()) dashboard(); else signInModal(); };
+
+  /* ---------- नियम व शर्तें + प्राइवेसी नीति ---------- */
+  const MAIL = 'arveenargaming786@gmail.com';
+  const LEGAL = {
+    terms: ['नियम व शर्तें', [
+      ['सेवा', 'ScreenBox एक मुफ़्त स्ट्रीमिंग ऐप है। इसका कंटेंट सिर्फ़ आपके निजी मनोरंजन के लिए है।'],
+      ['खाता', 'ऐप इस्तेमाल करने के लिए Google से साइन इन करना ज़रूरी है। अपने खाते की सुरक्षा आपकी ज़िम्मेदारी है।'],
+      ['विज्ञापन', 'ऐप मुफ़्त रखने के लिए कुछ एपिसोड से पहले विज्ञापन दिखाए जाते हैं। वह एपिसोड तभी खुलता है जब विज्ञापन पूरा देखा जाए।'],
+      ['कंटेंट के अधिकार', 'ऐप का कंटेंट कॉपीराइट से सुरक्षित है। उसे डाउनलोड करना, कॉपी करना या दोबारा बाँटना मना है।'],
+      ['गलत इस्तेमाल', 'ऐप के साथ छेड़छाड़ करने, विज्ञापन में गड़बड़ी करने या नियम तोड़ने पर खाता बंद किया जा सकता है।'],
+      ['बदलाव', 'ये शर्तें समय-समय पर बदल सकती हैं। बदलाव के बाद ऐप चलाते रहने का मतलब है कि आप नई शर्तें मानते हैं।'],
+      ['शिकायत', 'किसी कंटेंट पर आपत्ति या सवाल हो तो ' + MAIL + ' पर लिखें।']
+    ]],
+    privacy: ['प्राइवेसी नीति', [
+      ['हम क्या जानकारी लेते हैं', 'Google खाते से आपका नाम, ईमेल और फ़ोटो। साथ ही आपकी पसंद, आपने कौन-सा कंटेंट और कितने एपिसोड देखे, और कितने विज्ञापन देखे।'],
+      ['क्यों लेते हैं', 'आपका खाता पहचानने, पसंद हर फ़ोन पर साथ रखने और ऐप कैसा चल रहा है यह समझने के लिए।'],
+      ['कहाँ रखी जाती है', 'जानकारी Google Firebase के सर्वर पर सुरक्षित रखी जाती है। हम इसे किसी को बेचते नहीं हैं।'],
+      ['विज्ञापन', 'ऐप में Google AdMob के विज्ञापन आते हैं। AdMob आपके फ़ोन का विज्ञापन ID इस्तेमाल कर सकता है। इसे फ़ोन की सेटिंग में बंद किया जा सकता है।'],
+      ['आपके अधिकार', 'अपनी जानकारी देखने या हटवाने के लिए ' + MAIL + ' पर लिखें।'],
+      ['बच्चे', 'यह ऐप 13 साल से छोटे बच्चों के लिए नहीं है।']
+    ]]
+  };
+  function legalModal(k){
+    const [title, secs] = LEGAL[k];
+    openModal(`<h3>${title}</h3>` + secs.map(([h, t]) => `<h4 style="margin-top:14px;color:var(--gold2)">${h}</h4><p class="muted" style="font-size:15px">${t}</p>`).join('')
+      + `<button class="btn ghost wide" id="lg_ok">ठीक है</button>`);
+    document.getElementById('lg_ok').onclick = closeModal;
+  }
+  document.addEventListener('click', e => {
+    const a = e.target.closest && e.target.closest('[data-legal]');
+    if(a){ e.preventDefault(); legalModal(a.dataset.legal); }
+  });
+  const ft = document.querySelector('footer');
+  if(ft){
+    const p = document.createElement('p');
+    p.className = 'legal'; p.style.marginTop = '10px';
+    p.innerHTML = '<a data-legal="terms">नियम व शर्तें</a> • <a data-legal="privacy">प्राइवेसी नीति</a>';
+    ft.appendChild(p);
+  }
 
   render();
 })();
