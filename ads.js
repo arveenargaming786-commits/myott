@@ -15,6 +15,15 @@
   const css = document.createElement('style');
   css.textContent = `
     #seePremium,.cta{display:none!important}
+    #pl{position:fixed;inset:0;z-index:170;background:#000;display:flex;flex-direction:column}
+    #pl video{flex:1;min-height:0;width:100%;height:100%;max-height:none;margin:0;border-radius:0;object-fit:contain;background:#000}
+    #pl .bar{position:absolute;left:0;right:0;z-index:2;display:flex;align-items:center;gap:10px;padding:10px 12px;transition:opacity .25s;background:linear-gradient(rgba(0,0,0,.75),transparent)}
+    #pl .bar.top{top:0}
+    #pl .bar.bot{bottom:56px;justify-content:center;background:none}
+    #pl.hide .bar{opacity:0;pointer-events:none}
+    #pl .bar b{flex:1;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    #pl .pbtn{background:rgba(0,0,0,.55);border:1px solid rgba(242,165,22,.6);color:#fff;border-radius:12px;padding:8px 14px;font-weight:700;font-size:15px}
+    #pl .pbtn.g{background:linear-gradient(180deg,#e0183f,#98102a)}
     .overlay{align-items:flex-start!important;padding-bottom:90px;z-index:160!important}
     #gate .legal{font-size:13px;max-width:300px;margin-top:6px}
     #gate .legal a,footer .legal a{color:var(--gold2);text-decoration:underline;cursor:pointer}
@@ -163,15 +172,55 @@
     { const k = c.id + ':' + n; if(!seenE.has(k)){ seenE.add(k); bump({ep: [String(c.id), String(n)]}); } }
     const total = epCount(c);
     const url = (c.episodes && c.episodes[n - 1]) || c.video || SAMPLE_VIDEO;
-    openModal(`<h3>${c.title}</h3><p class="muted">एपिसोड ${n} / ${total}</p>
-      <video id="epv" src="${url}" controls autoplay playsinline></video>
-      <div style="display:flex;gap:10px;margin-top:14px">
-        <button class="btn ghost" style="flex:1" data-ads="list">☰ सभी एपिसोड</button>
-        ${n < total ? '<button class="btn red" style="flex:1" data-ads="next">अगला ▶</button>' : ''}
-      </div>`);
-    bindAds({list: () => epList(c), next: () => startEpisode(c, n + 1)});
-    const v = document.getElementById('epv');
-    if(v) v.onended = () => { if(n < total) toast('अगला एपिसोड: "अगला ▶" दबाएँ'); };
+    const btns = [{id: 'list', t: '☰ सभी एपिसोड', f: () => { closePlayer(); epList(c); }}];
+    if(n < total) btns.push({id: 'next', t: 'अगला ▶', g: 1, f: () => { closePlayer(); startEpisode(c, n + 1); }});
+    showPlayer({title: c.title, sub: 'एपिसोड ' + n + ' / ' + total, url, btns});
+  }
+
+  /* ---------- पूरी स्क्रीन वाला प्लेयर ---------- */
+  let plHide = null;
+  function closePlayer(fromPop){
+    const el = document.getElementById('pl');
+    if(!el) return;
+    try{ const v = el.querySelector('video'); v.pause(); v.removeAttribute('src'); v.load(); }catch(e){}
+    try{ if(document.fullscreenElement) document.exitFullscreen(); }catch(e){}
+    try{ if(screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); }catch(e){}
+    clearTimeout(plHide);
+    el.remove();
+    if(!fromPop && history.state && history.state.pl) history.back();
+  }
+  window.addEventListener('popstate', () => closePlayer(true));
+
+  function showPlayer({title, sub, url, btns}){
+    closePlayer();
+    const el = document.createElement('div');
+    el.id = 'pl';
+    el.innerHTML = `<div class="bar top"><button class="pbtn" id="pl_x">✕</button><b>${esc(title)}${sub ? ' • ' + esc(sub) : ''}</b><button class="pbtn" id="pl_fs">⛶</button></div>
+      <video src="${url}" controls autoplay playsinline></video>
+      <div class="bar bot">${btns.map(b => `<button class="pbtn ${b.g ? 'g' : ''}" data-pb="${b.id}">${b.t}</button>`).join('')}</div>`;
+    document.body.appendChild(el);
+    try{ history.pushState({pl: 1}, ''); }catch(e){}
+    const v = el.querySelector('video');
+    const show = () => {
+      el.classList.remove('hide'); clearTimeout(plHide);
+      plHide = setTimeout(() => { if(!v.paused) el.classList.add('hide'); }, 3000);
+    };
+    el.addEventListener('pointerdown', show);
+    v.addEventListener('play', show);
+    v.addEventListener('pause', () => { el.classList.remove('hide'); clearTimeout(plHide); });
+    v.addEventListener('ended', () => { el.classList.remove('hide'); clearTimeout(plHide); });
+    document.getElementById('pl_x').onclick = () => closePlayer();
+    document.getElementById('pl_fs').onclick = async () => {
+      try{
+        if(document.fullscreenElement){ await document.exitFullscreen(); if(screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); }
+        else{
+          await el.requestFullscreen();
+          try{ if(v.videoWidth > v.videoHeight && screen.orientation && screen.orientation.lock) await screen.orientation.lock('landscape'); }catch(e){}
+        }
+      }catch(e){ try{ v.webkitEnterFullscreen && v.webkitEnterFullscreen(); }catch(_){} }
+    };
+    btns.forEach(b => { const x = el.querySelector('[data-pb="' + b.id + '"]'); if(x) x.onclick = b.f; });
+    show();
   }
 
   /* कार्ड दबाने पर: एपिसोड वाला कंटेंट = सूची, फिल्म = सीधा प्ले */
@@ -194,8 +243,10 @@
   }
   const seenV = new Set(), seenE = new Set();
   const trackView = c => { const k = String(c.id); if(seenV.has(k)) return; seenV.add(k); bump({view: k}); };
-  const _play2 = play;
-  play = function(c){ trackView(c); return _play2.apply(this, arguments); };
+  play = function(c){
+    trackView(c);
+    showPlayer({title: c.title, sub: '', url: c.video || SAMPLE_VIDEO, btns: []});
+  };
 
   /* ---------- एडमिन डैशबोर्ड (प्रोफ़ाइल में) ---------- */
   const ADMIN = 'arveenargaming786@gmail.com';
