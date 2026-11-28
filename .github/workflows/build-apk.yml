@@ -28,13 +28,17 @@ jobs:
       - name: Create Android project
         run: |
           npm init -y
-          npm install @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6 @capacitor-firebase/authentication@6 firebase@10
+          npm install @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6 @capacitor-firebase/authentication@6 @capacitor-community/admob@6 firebase@10
           cat > capacitor.config.json <<'EOT'
           {
             "appId": "com.myott.app",
             "appName": "ScreenBox",
             "webDir": "www",
             "backgroundColor": "#220509",
+            "server": {
+              "url": "https://arveenargaming786-commits.github.io/myott/",
+              "cleartext": false
+            },
             "plugins": {
               "FirebaseAuthentication": {
                 "skipNativeAuth": true,
@@ -45,12 +49,12 @@ jobs:
           EOT
           npx cap add android
 
-      - name: Firebase file, Google sign-in library and signing key
+      - name: Firebase file, Google library, AdMob id and signing key
         run: |
           if [ -f google-services.json ]; then
             cp google-services.json android/app/google-services.json
           else
-            echo "google-services.json not found, Google login will not work"
+            echo "google-services.json नहीं मिली"
           fi
           cat >> android/app/build.gradle <<'EOT'
 
@@ -58,6 +62,10 @@ jobs:
               implementation 'com.google.android.gms:play-services-auth:21.2.0'
           }
           EOT
+          # AdMob app id (अभी Google का टेस्ट ID; असली ID बनने पर बदलें)
+          sed -i 's#<application#<application#' android/app/src/main/AndroidManifest.xml
+          sed -i '0,/<\/application>/s#</application>#    <meta-data android:name="com.google.android.gms.ads.APPLICATION_ID" android:value="ca-app-pub-3940256099942544~3347511713"/>\n    </application>#' android/app/src/main/AndroidManifest.xml
+          grep -n "APPLICATION_ID" android/app/src/main/AndroidManifest.xml
           mkdir -p ~/.android
           base64 -d pardaa-keystore.txt > ~/.android/debug.keystore
           cp ~/.android/debug.keystore android/app/pardaa.keystore
@@ -74,7 +82,7 @@ jobs:
               }
           }
           EOT
-          keytool -list -v -keystore android/app/pardaa.keystore -alias androiddebugkey -storepass android | grep SHA1
+          keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android 2>/dev/null | grep SHA1 || true
 
       - name: App icon
         continue-on-error: true
@@ -97,12 +105,10 @@ jobs:
           ./gradlew assembleDebug
 
       - name: Print signing info
-        continue-on-error: true
         run: |
           APK=android/app/build/outputs/apk/debug/app-debug.apk
-          BT=$(ls -d $ANDROID_HOME/build-tools/* | tail -1)
-          $BT/apksigner verify --print-certs $APK | grep -i "sha-1" || true
-          grep -rh "default_web_client_id" android/app/build/generated/res | head -3 || true
+          $ANDROID_HOME/build-tools/$(ls $ANDROID_HOME/build-tools | tail -1)/apksigner verify --print-certs $APK | grep -i sha-1 || true
+          grep -rn "default_web_client_id" android/app/build/generated/res 2>/dev/null | head -2 || true
 
       - uses: actions/upload-artifact@v4
         with:
